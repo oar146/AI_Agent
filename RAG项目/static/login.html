@@ -1,0 +1,402 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>登录 - AI 智能对话助手</title>
+    <style>
+        :root {
+            --bg: #FAF7F2;
+            --bg-card: #FFFFFF;
+            --text: #3D3830;
+            --text-secondary: #8A8379;
+            --text-muted: #B5AFA5;
+            --border: #E5DDD3;
+            --accent: #A8956B;
+            --accent-hover: #968256;
+            --user-bubble: #EDE6DA;
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+            background: var(--bg);
+            height: 100vh;
+            overflow: hidden;
+            color: var(--text);
+        }
+
+        .login-container {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            padding: 20px;
+        }
+
+        .login-card {
+            width: 400px;
+            max-width: 100%;
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 16px;
+            padding: 40px 36px 36px;
+            box-shadow: 0 2px 12px rgba(61, 56, 48, 0.06);
+            animation: fadeInUp 0.4s ease;
+        }
+
+        @keyframes fadeInUp {
+            from { opacity: 0; transform: translateY(16px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .login-logo {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+            margin-bottom: 28px;
+        }
+
+        .login-logo .icon {
+            width: 36px;
+            height: 36px;
+            border-radius: 8px;
+            background: var(--accent);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 16px;
+            color: #fff;
+        }
+
+        .login-logo .text h1 {
+            font-size: 18px;
+            font-weight: 600;
+            color: var(--text);
+            line-height: 1.3;
+        }
+
+        .login-logo .text p {
+            font-size: 11px;
+            color: var(--text-secondary);
+            margin-top: 2px;
+        }
+
+        .tab-bar {
+            display: flex;
+            gap: 0;
+            margin-bottom: 24px;
+            background: var(--user-bubble);
+            border-radius: 8px;
+            padding: 3px;
+        }
+
+        .tab-bar .tab {
+            flex: 1;
+            padding: 9px 0;
+            text-align: center;
+            font-size: 13px;
+            font-weight: 500;
+            color: var(--text-secondary);
+            cursor: pointer;
+            border-radius: 6px;
+            transition: background 0.2s, color 0.2s;
+            border: none;
+            background: transparent;
+            font-family: inherit;
+        }
+
+        .tab-bar .tab.active {
+            background: var(--bg-card);
+            color: var(--text);
+            box-shadow: 0 1px 3px rgba(61, 56, 48, 0.08);
+        }
+
+        .tab-bar .tab:hover:not(.active) { color: var(--text); }
+
+        .form-group { margin-bottom: 18px; }
+
+        .form-group label {
+            display: block;
+            font-size: 12px;
+            font-weight: 500;
+            color: var(--text-secondary);
+            margin-bottom: 6px;
+        }
+
+        .form-group input {
+            width: 100%;
+            padding: 12px 14px;
+            background: var(--bg);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            font-size: 14px;
+            font-family: inherit;
+            color: var(--text);
+            outline: none;
+            transition: border-color 0.2s;
+        }
+
+        .form-group input::placeholder { color: var(--text-muted); }
+
+        .form-group input:focus { border-color: var(--accent); }
+
+        .submit-btn {
+            width: 100%;
+            padding: 12px;
+            background: var(--accent);
+            border: none;
+            border-radius: 8px;
+            color: #fff;
+            font-size: 14px;
+            font-weight: 500;
+            font-family: inherit;
+            cursor: pointer;
+            transition: background 0.2s;
+            margin-top: 6px;
+        }
+
+        .submit-btn:hover:not(:disabled) { background: var(--accent-hover); }
+        .submit-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+        .message-box {
+            padding: 10px 14px;
+            border-radius: 8px;
+            font-size: 13px;
+            margin-bottom: 14px;
+            display: none;
+            line-height: 1.5;
+        }
+
+        .message-box.error {
+            display: block;
+            background: #FDF2F2;
+            border: 1px solid #E8C4C4;
+            color: #C45C5C;
+        }
+
+        .message-box.success {
+            display: block;
+            background: #F2F8F2;
+            border: 1px solid #C4DCC4;
+            color: #5C8A5C;
+        }
+
+        .footer-text {
+            text-align: center;
+            margin-top: 20px;
+            font-size: 12px;
+            color: var(--text-muted);
+        }
+
+        .footer-text a {
+            color: var(--accent);
+            text-decoration: none;
+        }
+
+        .footer-text a:hover { text-decoration: underline; }
+
+        .spinner {
+            display: inline-block;
+            width: 14px;
+            height: 14px;
+            border: 2px solid rgba(255,255,255,0.3);
+            border-top-color: #fff;
+            border-radius: 50%;
+            animation: spin 0.6s linear infinite;
+            vertical-align: middle;
+            margin-right: 6px;
+        }
+
+        @keyframes spin { to { transform: rotate(360deg); } }
+    </style>
+</head>
+<body>
+<div class="login-container">
+    <div class="login-card">
+        <!-- Logo -->
+        <div class="login-logo">
+            <div class="icon">✦</div>
+            <div class="text">
+                <h1>AI 智能助手</h1>
+                <p>基于知识库的 RAG 对话系统</p>
+            </div>
+        </div>
+
+        <!-- Tab 切换 -->
+        <div class="tab-bar">
+            <button class="tab active" data-tab="login" onclick="switchTab('login')">登录</button>
+            <button class="tab" data-tab="register" onclick="switchTab('register')">注册</button>
+        </div>
+
+        <!-- 提示框 -->
+        <div class="message-box" id="messageBox"></div>
+
+        <!-- 登录表单 -->
+        <form id="loginForm" onsubmit="handleLogin(event)" style="display:block;">
+            <div class="form-group">
+                <label>用户名</label>
+                <input type="text" id="loginUsername" placeholder="请输入用户名" required autocomplete="username">
+            </div>
+            <div class="form-group">
+                <label>密码</label>
+                <input type="password" id="loginPassword" placeholder="请输入密码" required autocomplete="current-password">
+            </div>
+            <button class="submit-btn" type="submit" id="loginBtn">登 录</button>
+        </form>
+
+        <!-- 注册表单 -->
+        <form id="registerForm" onsubmit="handleRegister(event)" style="display:none;">
+            <div class="form-group">
+                <label>用户名</label>
+                <input type="text" id="regUsername" placeholder="2-32 个字符" required autocomplete="off">
+            </div>
+            <div class="form-group">
+                <label>密码</label>
+                <input type="password" id="regPassword" placeholder="至少 6 位密码" required autocomplete="new-password">
+            </div>
+            <div class="form-group">
+                <label>确认密码</label>
+                <input type="password" id="regConfirm" placeholder="再次输入密码" required autocomplete="new-password">
+            </div>
+            <button class="submit-btn" type="submit" id="registerBtn">注 册</button>
+        </form>
+
+        <div class="footer-text">
+            <span id="footerHint">已有账号？<a href="#" onclick="switchTab('login');return false;">去登录</a></span>
+        </div>
+    </div>
+</div>
+
+<script>
+const API_BASE = window.location.origin;
+
+// ========== Tab 切换 ==========
+function switchTab(tab) {
+    document.querySelectorAll('.tab').forEach(t => t.classList.toggle('active', t.dataset.tab === tab));
+    document.getElementById('loginForm').style.display = tab === 'login' ? 'block' : 'none';
+    document.getElementById('registerForm').style.display = tab === 'register' ? 'block' : 'none';
+    document.getElementById('footerHint').innerHTML = tab === 'login'
+        ? '还没有账号？<a href="#" onclick="switchTab(\'register\');return false;">去注册</a>'
+        : '已有账号？<a href="#" onclick="switchTab(\'login\');return false;">去登录</a>';
+    clearMessage();
+}
+
+function showMessage(msg, type) {
+    const box = document.getElementById('messageBox');
+    box.textContent = msg;
+    box.className = 'message-box ' + type;
+}
+
+function clearMessage() {
+    const box = document.getElementById('messageBox');
+    box.className = 'message-box';
+    box.textContent = '';
+}
+
+function setLoading(btnId, loading) {
+    const btn = document.getElementById(btnId);
+    if (loading) {
+        btn.disabled = true;
+        btn.innerHTML = '<span class="spinner"></span>处理中...';
+    } else {
+        btn.disabled = false;
+        btn.textContent = btnId === 'loginBtn' ? '登 录' : '注 册';
+    }
+}
+
+// ========== 登录 ==========
+async function handleLogin(e) {
+    e.preventDefault();
+    clearMessage();
+    const username = document.getElementById('loginUsername').value.trim();
+    const password = document.getElementById('loginPassword').value.trim();
+    if (!username || !password) {
+        showMessage('请填写用户名和密码', 'error');
+        return;
+    }
+    setLoading('loginBtn', true);
+    try {
+        const res = await fetch(API_BASE + '/api/auth/login', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ username, password }),
+        });
+        const data = await res.json();
+        if (res.ok) {
+            localStorage.setItem('token', data.token);
+            localStorage.setItem('username', data.username);
+            window.location.href = '/';
+        } else {
+            showMessage(data.message || '登录失败', 'error');
+        }
+    } catch (err) {
+        showMessage('网络错误，请检查服务器连接', 'error');
+    } finally {
+        setLoading('loginBtn', false);
+    }
+}
+
+// ========== 注册 ==========
+async function handleRegister(e) {
+    e.preventDefault();
+    clearMessage();
+    const username = document.getElementById('regUsername').value.trim();
+    const password = document.getElementById('regPassword').value.trim();
+    const confirm = document.getElementById('regConfirm').value.trim();
+    if (!username || !password || !confirm) {
+        showMessage('请填写所有字段', 'error');
+        return;
+    }
+    if (password !== confirm) {
+        showMessage('两次密码输入不一致', 'error');
+        return;
+    }
+    if (password.length < 6) {
+        showMessage('密码长度不能少于 6 位', 'error');
+        return;
+    }
+    setLoading('registerBtn', true);
+    try {
+        const res = await fetch(API_BASE + '/api/auth/register', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ username, password }),
+        });
+        const data = await res.json();
+        if (res.ok) {
+            showMessage('注册成功！请登录', 'success');
+            setTimeout(() => switchTab('login'), 1200);
+        } else {
+            showMessage(data.message || '注册失败', 'error');
+        }
+    } catch (err) {
+        showMessage('网络错误，请检查服务器连接', 'error');
+    } finally {
+        setLoading('registerBtn', false);
+    }
+}
+
+// ========== 检查是否已登录 ==========
+// 如果已登录则自动跳转到聊天页
+(async function checkAuth() {
+    const token = localStorage.getItem('token');
+    if (token) {
+        try {
+            const res = await fetch(API_BASE + '/api/auth/verify', {
+                headers: { 'Authorization': 'Bearer ' + token },
+            });
+            if (res.ok) {
+                window.location.href = '/';
+            } else {
+                localStorage.removeItem('token');
+                localStorage.removeItem('username');
+            }
+        } catch (_) {}
+    }
+})();
+</script>
+</body>
+</html>
