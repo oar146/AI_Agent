@@ -6,9 +6,11 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse, FileResponse, JSONResponse
 from pydantic import BaseModel
 
-from rag import RagService
+from agent_config import get_agent
 from auth import init_database, register_user, login_user, logout_user, validate_token
 from file_parser import parse_file
+from file_history_store import get_history
+from langchain_core.messages import HumanMessage, AIMessage
 
 app = FastAPI(title="智能对话助手")
 
@@ -20,9 +22,6 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
-# 初始化 RAG 服务
-rag_service = RagService()
 
 # 初始化数据库（启动时自动创建 user 表）
 try:
@@ -179,28 +178,57 @@ async def get_session_messages(session_id: str, authorization: str = Header(""))
 
 @app.post("/api/chat")
 async def chat(request: ChatRequest, authorization: str = Header("")):
-    """聊天接口（SSE 流式响应）"""
+    """聊天接口（SSE 流式响应）- 使用完整 Agent 工作流"""
     username = _get_current_user(authorization)
-    # 使用 "用户名/会话ID" 作为 session_id，实现历史记录按用户隔离
     namespaced_session_id = f"{username}/{request.session_id}"
-    session_config = {
-        "configurable": {
-            "session_id": namespaced_session_id,
-        }
-    }
+
+    agent = get_agent()
 
     async def generate():
+        full_response = ""
         try:
-            async for chunk in rag_service.chain.astream(
-                {"input": request.message},
-                session_config,
-            ):
-                if chunk:
-                    yield f"data: {json.dumps({'content': chunk}, ensure_ascii=False)}\n\n"
-            yield "data: [DONE]\n\n"
+            # 1. 加载短期对话历史
+            history = get_history(namespaced_session_id)
+            existing_messages = history.messages
+
+            # 2. 构建 Agent 初始状态
+            initial_state = {
+                "messages": existing_messages + [HumanMessage(content=request.message)],
+                "user_input": request.message,
+                "username": username,
+                "session_id": request.session_id,
+                "memory_context": "",
+                "plan": "",
+                "critique": "",
+                "revision_count": 0,
+            }
+
+            # 3. 运行 Agent 图（收集完所有输出后一次性返回）
+            final_state = await agent.ainvoke(
+                initial_state,
+                {"recursion_limit": 50},
+            )
+
+            # 4. 从最终状态中提取最后一条 AI 回答
+            messages = final_state.get("messages", [])
+            for msg in reversed(messages):
+                if isinstance(msg, AIMessage) and msg.content:
+                    full_response = msg.content
+                    break
+
+            # 5. 流式输出完整回答（含保存历史记录）
+            if full_response:
+                # 一次性发送（前端会正常展示）
+                yield f"data: {json.dumps({'content': full_response}, ensure_ascii=False)}\n\n"
+                history.add_messages([
+                    HumanMessage(content=request.message),
+                    AIMessage(content=full_response),
+                ])
+
         except Exception as e:
             yield f"data: {json.dumps({'error': str(e)}, ensure_ascii=False)}\n\n"
-            yield "data: [DONE]\n\n"
+
+        yield "data: [DONE]\n\n"
 
     return StreamingResponse(
         generate(),
@@ -220,40 +248,70 @@ async def chat_with_file(
     file: UploadFile = File(...),
     authorization: str = Header(""),
 ):
-    """带文件上传的聊天接口（SSE 流式响应）"""
+    """带文件上传的聊天接口（SSE 流式响应）- 使用 Agent 自主分析文件内容"""
     username = _get_current_user(authorization)
     namespaced_session_id = f"{username}/{session_id}"
-    session_config = {
-        "configurable": {
-            "session_id": namespaced_session_id,
-        }
-    }
 
     # 解析文件内容
+    file_content = ""
+    file_name = file.filename or "未知文件"
     try:
         file_bytes = await file.read()
-        file_content = parse_file(file_bytes, file.filename)
-        # 将文件内容拼接到用户消息中
+        file_content = parse_file(file_bytes, file_name)
+    except Exception as e:
+        file_content = f""
+
+    # 构建完整的用户消息（包含文件内容上下文）
+    if file_content:
         full_message = (
-            f"用户上传了文件《{file.filename}》，内容如下：\n"
+            f"用户上传了文件《{file_name}》，内容如下：\n"
             f"---文件内容开始---\n{file_content}\n---文件内容结束---\n\n"
             f"用户提问：{message}"
         )
-    except Exception as e:
+    else:
         full_message = message
 
+    agent = get_agent()
+
     async def generate():
+        full_response = ""
         try:
-            async for chunk in rag_service.chain.astream(
-                {"input": full_message},
-                session_config,
+            history = get_history(namespaced_session_id)
+            existing_messages = history.messages
+
+            initial_state = {
+                "messages": existing_messages + [HumanMessage(content=full_message)],
+                "user_input": full_message,
+                "username": username,
+                "session_id": session_id,
+                "memory_context": "",
+                "plan": "",
+                "critique": "",
+                "revision_count": 0,
+            }
+
+            async for event in agent.astream_events(
+                initial_state,
+                {"recursion_limit": 50},
+                version="v1",
             ):
-                if chunk:
-                    yield f"data: {json.dumps({'content': chunk}, ensure_ascii=False)}\n\n"
-            yield "data: [DONE]\n\n"
+                kind = event["event"]
+                if kind == "on_chat_model_stream":
+                    chunk = event["data"]["chunk"]
+                    if hasattr(chunk, "content") and chunk.content:
+                        full_response += chunk.content
+                        yield f"data: {json.dumps({'content': chunk.content}, ensure_ascii=False)}\n\n"
+
+            if full_response:
+                history.add_messages([
+                    HumanMessage(content=full_message),
+                    AIMessage(content=full_response),
+                ])
+
         except Exception as e:
             yield f"data: {json.dumps({'error': str(e)}, ensure_ascii=False)}\n\n"
-            yield "data: [DONE]\n\n"
+
+        yield "data: [DONE]\n\n"
 
     return StreamingResponse(
         generate(),
